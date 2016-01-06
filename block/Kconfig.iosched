@@ -47,6 +47,60 @@ config IOSCHED_CFQ
 
 	  Note: If BLK_CGROUP=m, then CFQ can be built only as module.
 
+config IOSCHED_BFQ
+	tristate "BFQ I/O scheduler"
+	default y
+	---help---
+	The bfq scheduler
+
+config IOSCHED_FIFO
+	tristate "FIFO I/O scheduler"
+	default y
+	---help---
+	The fifo scheduler
+
+config IOSCHED_FIOPS
+	tristate "FIOPS I/O scheduler"
+	default y
+	---help---
+	The FIOPS scheduler
+
+config IOSCHED_ROW
+	tristate "ROW I/O scheduler"
+	default y
+	---help---
+	The ROW scheduler
+
+config IOSCHED_SIO
+	tristate "SIO I/O scheduler"
+	default y
+	---help---
+	The SIO scheduler
+
+config IOSCHED_SIOPLUS
+	tristate "SIOPLUS I/O scheduler"
+	default y
+	---help---
+	The SIOPLUS scheduler
+
+config IOSCHED_TRIPNDROID
+	tristate "TRIPNDROID I/O scheduler"
+	default y
+	---help---
+	The TRIPNDROID scheduler
+
+config IOSCHED_VR
+	tristate "VR I/O scheduler"
+	default y
+	---help---
+	The VR scheduler
+
+config IOSCHED_ZEN
+	tristate "ZEN I/O scheduler"
+	default y
+	---help---
+	The ZEN scheduler
+
 config CFQ_GROUP_IOSCHED
 	bool "CFQ Group Scheduling support"
 	depends on IOSCHED_CFQ && BLK_CGROUP
@@ -77,6 +131,15 @@ config DEFAULT_IOSCHED
 	default "deadline" if DEFAULT_DEADLINE
 	default "cfq" if DEFAULT_CFQ
 	default "noop" if DEFAULT_NOOP
+	default bfq if DEFAULT_BFQ
+	default fifo if DEFAULT_FIFO
+	default fiops if DEFAULT_FIOPS
+	default row if DEFAULT_ROW
+	default sio if DEFAULT_SIO
+	default sioplus if DEFAULT_SIOPLUS
+	default tripndroid if DEFAULT_TRIPNDROID
+	default vr if DEFAULT_VR
+	default zen if DEFAULT_ZEN
 
 endmenu
 
