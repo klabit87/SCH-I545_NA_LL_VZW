@@ -1,7 +1,7 @@
 /*
  *
  * Automatically generated file; DO NOT EDIT.
- * Linux/arm 3.4.0 Kernel Configuration
+ * Linux/arm 3.4.0-AIO-kernel-BETA2 Kernel Configuration
  *
  */
 #define CONFIG_RING_BUFFER 1
@@ -706,6 +706,7 @@
 #define CONFIG_CRYPTO_LZO 1
 #define CONFIG_SND_PCM 1
 #define CONFIG_PM_RUNTIME 1
+#define CONFIG_FORCE_FAST_CHARGE 1
 #define CONFIG_PARTITION_ADVANCED 1
 #define CONFIG_IR_SONY_DECODER 1
 #define CONFIG_NETFILTER_XT_MATCH_COMMENT 1

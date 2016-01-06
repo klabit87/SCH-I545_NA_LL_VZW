@@ -1,1 +1,1 @@
-#define UTS_RELEASE "3.4.0-AIO-kernel"
+#define UTS_RELEASE "3.4.0-AIO-kernel-BETA2-AIO-kernel"
