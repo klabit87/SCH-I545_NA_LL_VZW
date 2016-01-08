@@ -32,7 +32,6 @@
 #include <linux/fastchg.h>
 #endif
 
-
 #if defined(CONFIG_BATTERY_SAMSUNG)
 #include <linux/battery/sec_battery.h>
 #include <linux/battery/sec_fuelgauge.h>
@@ -42,25 +41,6 @@
 #define SHORT_BATTERY_STANDARD		100
 
 static unsigned int sec_bat_recovery_mode;
-#if defined(CONFIG_MACH_JF_DCM)
-static sec_charging_current_t charging_current_table[] = {
-	{1900,	1600,	200,	40*60},
-	{460,	0,	0,	0},
-	{460,	460,	200,	40*60},
-	{1900,	1600,	200,	40*60},
-	{460,	460,	200,	40*60},
-	{1000,	1000,	200,	40*60},
-	{1000,	1000,	200,	40*60},
-	{460,	460,	200,	40*60},
-	{1700,	1600,	200,	40*60},
-	{0,	0,	0,	0},
-	{650,	700,	200,	40*60},
-	{1900,	1600,	200,	40*60},
-	{0,	0,	0,	0},
-	{0,	0,	0,	0},
-	{460,	0,	0,	0},
-};
-#else
 static sec_charging_current_t charging_current_table[] = {
 	{1900,	1600,	200,	40*60},
 	{460,	0,	0,	0},
@@ -80,7 +60,7 @@ static sec_charging_current_t charging_current_table[] = {
 	{0,	0,	0,	0},
 	{460,	0,	0,	0},
 };
-#endif
+
 static bool sec_bat_adc_none_init(
 		struct platform_device *pdev) {return true; }
 static bool sec_bat_adc_none_exit(void) {return true; }
@@ -149,7 +129,6 @@ static struct i2c_gpio_platform_data gpio_i2c_data_fgchg = {
 
 static bool sec_fg_gpio_init(void)
 {
-#if !defined(CONFIG_MACH_JFVE_EUR)
 	struct pm_gpio param = {
 		.direction     = PM_GPIO_DIR_IN,
 		.pull          = PM_GPIO_PULL_NO,
@@ -180,20 +159,12 @@ static bool sec_fg_gpio_init(void)
 				&fuel_alert_mppcfg);
 	}
 	else
-#endif
 		gpio_tlmm_config(GPIO_CFG(GPIO_FUEL_INT,  0, GPIO_CFG_INPUT,
 			GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
-#if defined(CONFIG_MACH_JFTDD_EUR) || defined(CONFIG_MACH_JACTIVE_EUR)
-	gpio_tlmm_config(GPIO_CFG(gpio_i2c_data_fgchg.scl_pin, 0,
-			GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
-	gpio_tlmm_config(GPIO_CFG(gpio_i2c_data_fgchg.sda_pin,  0,
-			GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
-#else
 	gpio_tlmm_config(GPIO_CFG(gpio_i2c_data_fgchg.scl_pin, 0,
 			GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
 	gpio_tlmm_config(GPIO_CFG(gpio_i2c_data_fgchg.sda_pin,  0,
 			GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
-#endif
 	gpio_set_value(gpio_i2c_data_fgchg.scl_pin, 1);
 	gpio_set_value(gpio_i2c_data_fgchg.sda_pin, 1);
 
@@ -352,52 +323,54 @@ static int sec_bat_get_cable_from_extended_cable_type(
 		cable_type = cable_main;
 		break;
 	}
+
 #ifdef CONFIG_FORCE_FAST_CHARGE
- 	/* We are in basic Fast Charge mode, so we substitute AC to USB
- 	   levels */
- 	if (force_fast_charge == FAST_CHARGE_FORCE_AC) {
- 		switch(cable_type) {
- 			/* These are low current USB connections,
-  		   apply 1.A level to USB */
- 			case POWER_SUPPLY_TYPE_USB:
- 			case POWER_SUPPLY_TYPE_USB_ACA:
- 			case POWER_SUPPLY_TYPE_CARDOCK:
- 			case POWER_SUPPLY_TYPE_OTG:
- 				charge_current_max = USB_CHARGE_1000;
- 				charge_current     = USB_CHARGE_1000;
- 				break;
- 
- 		}
- 	/* We are in advanced Fast Charge mode, so we apply custom charging
- 	   levels for both AC and USB */
- 	} else if (force_fast_charge == FAST_CHARGE_FORCE_CUSTOM_MA) {
- 		switch(cable_type) {
- 			/* These are USB connections, apply custom USB current
- 			   for all of them */
- 			case POWER_SUPPLY_TYPE_USB:
- 			case POWER_SUPPLY_TYPE_USB_DCP:
- 			case POWER_SUPPLY_TYPE_USB_CDP:
- 			case POWER_SUPPLY_TYPE_USB_ACA:
+	/* We are in basic Fast Charge mode, so we substitute AC to USB
+	   levels */
+	if (force_fast_charge == FAST_CHARGE_FORCE_AC) {
+		switch(cable_type) {
+			/* These are low current USB connections,
+			   apply 1.A level to USB */
+			case POWER_SUPPLY_TYPE_USB:
+			case POWER_SUPPLY_TYPE_USB_ACA:
 			case POWER_SUPPLY_TYPE_CARDOCK:
- 			case POWER_SUPPLY_TYPE_OTG:
- 				charge_current_max = usb_charge_level;
- 				charge_current     = usb_charge_level;
- 				break;
- 			/* These are AC connections, apply custom AC current
- 			   for all of them */
- 			case POWER_SUPPLY_TYPE_MAINS:
- 				charge_current_max = ac_charge_level;
- 				/* but never go above 1.9A */
- 				charge_current     =
- 					min(ac_charge_level, MAX_CHARGE_LEVEL);
- 				break;
- 			/* Don't do anything for any other kind of connections
- 			   and don't touch when type is unknown */
- 			default:
- 				break;
- 		}
- 	}
- #endif
+			case POWER_SUPPLY_TYPE_OTG:
+				charge_current_max = USB_CHARGE_1000;
+				charge_current     = USB_CHARGE_1000;
+				break;
+
+		}
+	/* We are in advanced Fast Charge mode, so we apply custom charging
+	   levels for both AC and USB */
+	} else if (force_fast_charge == FAST_CHARGE_FORCE_CUSTOM_MA) {
+		switch(cable_type) {
+			/* These are USB connections, apply custom USB current
+			   for all of them */
+			case POWER_SUPPLY_TYPE_USB:
+			case POWER_SUPPLY_TYPE_USB_DCP:
+			case POWER_SUPPLY_TYPE_USB_CDP:
+			case POWER_SUPPLY_TYPE_USB_ACA:
+			case POWER_SUPPLY_TYPE_CARDOCK:
+			case POWER_SUPPLY_TYPE_OTG:
+				charge_current_max = usb_charge_level;
+				charge_current     = usb_charge_level;
+				break;
+			/* These are AC connections, apply custom AC current
+			   for all of them */
+			case POWER_SUPPLY_TYPE_MAINS:
+				charge_current_max = ac_charge_level;
+				/* but never go above 1.9A */
+				charge_current     =
+					min(ac_charge_level, MAX_CHARGE_LEVEL);
+				break;
+			/* Don't do anything for any other kind of connections
+			   and don't touch when type is unknown */
+			default:
+				break;
+		}
+	}
+#endif
+
 	if (charge_current_max == 0) {
 		charge_current_max =
 			charging_current_table[cable_type].input_current_limit;
@@ -812,6 +785,21 @@ sec_battery_platform_data_t sec_battery_pdata = {
 	.temp_high_threshold_lpm = 470,
 	.temp_high_recovery_lpm = 430,
 	.temp_low_threshold_lpm = -30,
+	.temp_low_recovery_lpm = 0,
+#elif defined(CONFIG_MACH_JACTIVE_EUR)
+	.temp_high_threshold_event = 600,
+	.temp_high_recovery_event = 400,
+	.temp_low_threshold_event = -50,
+	.temp_low_recovery_event = 0,
+
+	.temp_high_threshold_normal = 600,
+	.temp_high_recovery_normal = 400,
+	.temp_low_threshold_normal = -50,
+	.temp_low_recovery_normal = 0,
+
+	.temp_high_threshold_lpm = 600,
+	.temp_high_recovery_lpm = 400,
+	.temp_low_threshold_lpm = -50,
 	.temp_low_recovery_lpm = 0,
 #elif defined(CONFIG_MACH_JF_CRI)
 	.temp_high_threshold_event = 600,

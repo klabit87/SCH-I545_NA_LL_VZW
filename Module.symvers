@@ -2896,7 +2896,6 @@
 0x3f931f8d	v4l2_subdev_g_ext_ctrls	vmlinux	EXPORT_SYMBOL
 0x04124528	v4l2_subdev_s_ext_ctrls	vmlinux	EXPORT_SYMBOL
 0xdfabe0ff	scm_call	vmlinux	EXPORT_SYMBOL
-0x0c4c3dad	sec_check_execpath	vmlinux	EXPORT_SYMBOL
 0x1b6314fd	in_aton	vmlinux	EXPORT_SYMBOL
 0x27dc3299	neigh_resolve_output	vmlinux	EXPORT_SYMBOL
 0x980b604e	snd_card_register	vmlinux	EXPORT_SYMBOL
