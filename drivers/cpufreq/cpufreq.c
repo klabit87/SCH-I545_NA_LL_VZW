@@ -32,6 +32,16 @@
 
 #include <trace/events/power.h>
 
+int GLOBALKT_MIN_FREQ_LIMIT = 378000;
+int GLOBALKT_MAX_FREQ_LIMIT = 1890000;
+
+static unsigned int vfreq_lock = 0;
+static bool vfreq_lock_tempOFF = false;
+static unsigned int isBooted = 0;
+
+extern ssize_t get_gpu_vdd_levels_str(char *buf);
+extern void set_gpu_vdd_levels(int uv_tbl[]);
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -441,8 +451,112 @@ static ssize_t store_##file_name					\
 	return ret ? ret : count;					\
 }
 
-store_one(scaling_min_freq, min);
-store_one(scaling_max_freq, max);
+ssize_t show_GPU_mV_table(struct cpufreq_policy *policy, char *buf)
+{
+	int modu = 0;
+	modu = 0;
+	return get_gpu_vdd_levels_str(buf);
+}
+
+ssize_t store_GPU_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	unsigned int ret = -EINVAL;
+	unsigned int u[3];
+	ret = sscanf(buf, "%d %d %d", &u[0], &u[1], &u[2]);
+	set_gpu_vdd_levels(u);
+	return count;
+}
+
+static ssize_t __ref store_scaling_min_freq(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	unsigned int ret = -EINVAL;
+	unsigned int value = 0;
+	struct cpufreq_policy new_policy;
+
+	ret = sscanf(buf, "%u", &value);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (value == 384000)
+		value = 378000;
+
+	if (value <= GLOBALKT_MIN_FREQ_LIMIT)
+		value = GLOBALKT_MIN_FREQ_LIMIT;
+
+	if (!cpu_online(policy->cpu)) cpu_up(policy->cpu);
+
+	ret = cpufreq_get_policy(&new_policy, policy->cpu);
+	new_policy.min = value;
+	ret = __cpufreq_set_policy(policy, &new_policy);
+	policy->user_policy.min = policy->min;
+
+	return count;
+}
+
+static ssize_t __ref store_scaling_max_freq(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	unsigned int ret = -EINVAL;
+	unsigned int value = 0;
+	struct cpufreq_policy new_policy;
+
+	ret = sscanf(buf, "%u", &value);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (vfreq_lock == 0)
+	{
+		if (value > GLOBALKT_MAX_FREQ_LIMIT)
+			value = GLOBALKT_MAX_FREQ_LIMIT;
+		if (value < GLOBALKT_MIN_FREQ_LIMIT)
+			value = GLOBALKT_MIN_FREQ_LIMIT;
+
+		if (!cpu_online(policy->cpu)) cpu_up(policy->cpu);
+
+		ret = cpufreq_get_policy(&new_policy, policy->cpu);
+		new_policy.max = value;
+		ret = __cpufreq_set_policy(policy, &new_policy);
+		policy->user_policy.max = policy->max;
+	}
+	return count;
+}
+
+static ssize_t store_scaling_booted(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	unsigned int ret = -EINVAL;
+	unsigned int value = 0;
+	struct cpufreq_policy new_policy;
+
+	pr_alert("store_scaling_booted call open: %d\n", GLOBALKT_MAX_FREQ_LIMIT);
+	ret = sscanf(buf, "%u", &value);
+	if (value == 1)
+	{
+		if (vfreq_lock == 1)
+		{
+			vfreq_lock = 0;
+			vfreq_lock_tempOFF = true;
+		}
+		isBooted = 1;
+		GLOBALKT_MIN_FREQ_LIMIT = 81000;
+		GLOBALKT_MAX_FREQ_LIMIT = 1890000;
+		cpufreq_get_policy(&new_policy, policy->cpu);
+		new_policy.min = 378000;
+		new_policy.max = 1890000;
+		new_policy.cpuinfo.min_freq = GLOBALKT_MIN_FREQ_LIMIT;
+		new_policy.cpuinfo.max_freq = GLOBALKT_MAX_FREQ_LIMIT;
+		new_policy.user_policy.min = 378000;
+		new_policy.user_policy.max = 1890000;
+		ret = __cpufreq_set_policy(policy, &new_policy);
+	}
+	else
+		isBooted = 0;
+	pr_alert("store_scaling_booted call close: %d\n", GLOBALKT_MAX_FREQ_LIMIT);
+	return count;
+}
+
+static ssize_t show_scaling_booted(struct cpufreq_policy *policy, char *buf)
+{
+	return sprintf(buf, "%u\n", isBooted);
+}
 
 /**
  * show_cpuinfo_cur_freq - current CPU frequency as detected by hardware
@@ -619,6 +733,64 @@ static ssize_t show_bios_limit(struct cpufreq_policy *policy, char *buf)
 	return sprintf(buf, "%u\n", policy->cpuinfo.max_freq);
 }
 
+extern ssize_t acpuclk_get_vdd_levels_str(char *buf);
+extern void acpuclk_set_vdd(unsigned acpu_khz, int vdd);
+
+static ssize_t show_vdd_levels(struct kobject *a, struct attribute *b, char *buf) {
+	return acpuclk_get_vdd_levels_str(buf);
+}
+
+static ssize_t store_vdd_levels(struct kobject *a, struct attribute *b, const char *buf, size_t count) {
+
+	int i = 0, j;
+	int pair[2] = { 0, 0 };
+	int sign = 0;
+
+	if (count < 1)
+		return 0;
+
+	if (buf[0] == '-') {
+		sign = -1;
+		i++;
+	}
+	else if (buf[0] == '+') {
+		sign = 1;
+		i++;
+	}
+
+	for (j = 0; i < count; i++) {
+
+		char c = buf[i];
+
+		if ((c >= '0') && (c <= '9')) {
+			pair[j] *= 10;
+			pair[j] += (c - '0');
+		}
+		else if ((c == ' ') || (c == '\t')) {
+			if (pair[j] != 0) {
+				j++;
+
+				if ((sign != 0) || (j > 1))
+					break;
+			}
+		}
+		else
+			break;
+	}
+
+	if (sign != 0) {
+		if (pair[0] > 0)
+			acpuclk_set_vdd(0, sign * pair[0]);
+	}
+	else {
+		if ((pair[0] > 0) && (pair[1] > 0))
+			acpuclk_set_vdd((unsigned)pair[0], pair[1]);
+		else
+			return -EINVAL;
+	}
+	return count;
+}
+
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
 cpufreq_freq_attr_ro(cpuinfo_max_freq);
@@ -634,6 +806,9 @@ cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
+cpufreq_freq_attr_rw(scaling_booted);
+cpufreq_freq_attr_rw(GPU_mV_table);
+define_one_global_rw(vdd_levels);
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -648,7 +823,18 @@ static struct attribute *default_attrs[] = {
 	&scaling_driver.attr,
 	&scaling_available_governors.attr,
 	&scaling_setspeed.attr,
+	&scaling_booted.attr,
+	&GPU_mV_table.attr,
 	NULL
+};
+
+static struct attribute *vddtbl_attrs[] = {
+	&vdd_levels.attr,
+	NULL
+};
+static struct attribute_group vddtbl_attr_group = {
+		.attrs = vddtbl_attrs,
+		.name = "vdd_table",
 };
 
 struct kobject *cpufreq_global_kobject;
@@ -899,7 +1085,8 @@ static int cpufreq_add_dev_interface(unsigned int cpu,
 
 	memcpy(&new_policy, policy, sizeof(struct cpufreq_policy));
 	/* assure that the starting sequence is run in __cpufreq_set_policy */
-	policy->governor = NULL;
+	if (policy)
+		policy->governor = NULL;
 
 	/* set default policy */
 	ret = __cpufreq_set_policy(policy, &new_policy);
@@ -2009,6 +2196,7 @@ EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 static int __init cpufreq_core_init(void)
 {
 	int cpu;
+	int rc;
 
 	if (cpufreq_disabled())
 		return -ENODEV;
@@ -2021,7 +2209,8 @@ static int __init cpufreq_core_init(void)
 	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_subsys.dev_root->kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
-
+	rc = sysfs_create_group(cpufreq_global_kobject, &vddtbl_attr_group);
+	
 	return 0;
 }
 core_initcall(cpufreq_core_init);

@@ -54,6 +54,11 @@ int speed_bin;
 int pvs_bin;
 #endif
 
+extern void reset_num_cpu_freqs(void);
+
+#define MAX_VDD_SC 1400000 /* uV */
+#define MIN_VDD_SC  700000 /* uV */
+
 static DEFINE_MUTEX(driver_lock);
 static DEFINE_SPINLOCK(l2_lock);
 
@@ -941,8 +946,53 @@ static void __init bus_init(const struct l2_level *l2_level)
 		dev_err(drv.dev, "initial bandwidth req failed (%d)\n", ret);
 }
 
+#define HFPLL_MIN_VDD		 600000
+#define HFPLL_MAX_VDD		1450000
+
+ssize_t acpuclk_get_vdd_levels_str(char *buf) {
+
+	int i, len = 0;
+
+	if (buf) {
+		mutex_lock(&driver_lock);
+
+		for (i = 0; drv.acpu_freq_tbl[i].speed.khz; i++) {
+			/* updated to use uv required by 8x60 architecture - faux123 */
+			len += sprintf(buf + len, "%8lu: %8d\n", drv.acpu_freq_tbl[i].speed.khz,
+				drv.acpu_freq_tbl[i].vdd_core );
+		}
+
+		mutex_unlock(&driver_lock);
+	}
+	return len;
+}
+
+/* updated to use uv required by 8x60 architecture - faux123 */
+void acpuclk_set_vdd(unsigned int khz, int vdd_uv) {
+
+	int i;
+	unsigned int new_vdd_uv;
+
+	mutex_lock(&driver_lock);
+
+	for (i = 0; drv.acpu_freq_tbl[i].speed.khz; i++) {
+		if (khz == 0)
+			new_vdd_uv = min(max((unsigned int)(drv.acpu_freq_tbl[i].vdd_core + vdd_uv),
+				(unsigned int)HFPLL_MIN_VDD), (unsigned int)HFPLL_MAX_VDD);
+		else if ( drv.acpu_freq_tbl[i].speed.khz == khz)
+			new_vdd_uv = min(max((unsigned int)vdd_uv,
+				(unsigned int)HFPLL_MIN_VDD), (unsigned int)HFPLL_MAX_VDD);
+		else 
+			continue;
+
+		drv.acpu_freq_tbl[i].vdd_core = new_vdd_uv;
+	}
+	pr_warn("acpuclock: user voltage table modified!\n");
+	mutex_unlock(&driver_lock);
+}
+
 #ifdef CONFIG_CPU_FREQ_MSM
-static struct cpufreq_frequency_table freq_table[NR_CPUS][35];
+static struct cpufreq_frequency_table freq_table[NR_CPUS][FREQ_TABLE_SIZE];
 extern int console_batt_stat;
 static void __init cpufreq_table_init(void)
 {
@@ -990,6 +1040,7 @@ static void __init cpufreq_table_init(void) {}
 static void __init dcvs_freq_init(void)
 {
 	int i;
+	reset_num_cpu_freqs();
 
 	for (i = 0; drv.acpu_freq_tbl[i].speed.khz != 0; i++)
 		if (drv.acpu_freq_tbl[i].use_for_scaling)
@@ -1055,8 +1106,8 @@ static const int krait_needs_vmin(void)
 static void krait_apply_vmin(struct acpu_level *tbl)
 {
 	for (; tbl->speed.khz != 0; tbl++) {
-		if (tbl->vdd_core < 1150000)
-			tbl->vdd_core = 1150000;
+		if (tbl->vdd_core < MIN_VDD_SC)
+				tbl->vdd_core = MIN_VDD_SC;
 		tbl->avsdscr_setting = 0;
 	}
 }
